@@ -1,13 +1,59 @@
 const std = @import("std");
 const xev = @import("xev");
 
-pub fn indexApplications(allocator: std.mem.Allocator) !void {
+const Task = xev.ThreadPool.Task;
+
+pub const Job = struct {
+    task: Task,
+    results: []Application = &.{},
+    allocator: std.mem.Allocator,
+    wg: xev.Async,
+    done: bool = false,
+};
+
+pub fn indexApplications(
+    allocator: std.mem.Allocator,
+    pool: *xev.ThreadPool,
+) !*Job {
+    const wg = try xev.Async.init();
+    const task = Task{ .callback = &wrapper };
+
+    var job = try allocator.create(Job);
+    job.* = Job{
+        .task = task,
+        .allocator = allocator,
+        .wg = wg,
+    };
+
+    const batch = xev.ThreadPool.Batch.from(&job.task);
+    pool.schedule(batch);
+
+    return job;
+}
+
+fn wrapper(task: *Task) void {
+    var job = @fieldParentPtr(Job, "task", task);
+
+    job.results = _indexApplications() catch |err| {
+        std.log.err("failed to index: {}", .{err});
+        return;
+    };
+    std.log.info("completed search", .{});
+    job.done = true;
+    job.wg.notify() catch |err| {
+        std.log.err("failed to notify: {}", .{err});
+    };
+}
+
+pub fn _indexApplications() ![]Application {
+    const allocator = std.heap.c_allocator;
     const data_dirs = std.os.getenv("XDG_DATA_DIRS") orelse {
         return error.ApplcationsUnavailable;
     };
     var applications = std.ArrayList(Application).init(allocator);
     var iter = std.mem.splitScalar(u8, data_dirs, ':');
     var map = std.StringHashMap(Icon).init(allocator);
+    defer map.deinit();
 
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
@@ -20,6 +66,8 @@ pub fn indexApplications(allocator: std.mem.Allocator) !void {
     for (applications.items) |*app| {
         app.*.icon = if (map.get(app.*.icon)) |i| i.path else "";
     }
+
+    return try applications.toOwnedSlice();
 }
 
 pub const DesiredSize = 32;
@@ -103,8 +151,9 @@ pub fn getApplications(allocator: std.mem.Allocator, path: []const u8, list: *st
             const extension = std.fs.path.extension(entry.path);
             if (!std.mem.eql(u8, extension, ".desktop")) continue;
 
-            const application = parseApplication(allocator, applications, entry.path) catch continue;
-            try list.append(application);
+            if (parseApplication(allocator, applications, entry.path) catch continue) |application| {
+                try list.append(application);
+            }
         }
     }
 }
@@ -116,7 +165,7 @@ pub const Application = struct {
 };
 
 // crude parser for the .desktop format
-fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const u8) !Application {
+fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const u8) !?Application {
     var file = try dir.openFile(path, .{});
     const contents = try file.readToEndAlloc(
         allocator,
@@ -144,6 +193,14 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
                 application.exec = value.?;
             } else if (std.mem.eql(u8, key.?, "Icon")) {
                 application.icon = value.?;
+            } else if (std.mem.eql(u8, key.?, "Type")) {
+                if (!std.mem.eql(u8, std.mem.trim(
+                    u8,
+                    value.?,
+                    " \r",
+                ), "Application")) return null;
+            } else if (std.mem.eql(u8, key.?, "NoDisplay")) {
+                if (std.mem.eql(u8, value.?, "true")) return null;
             }
         }
     }
@@ -161,5 +218,5 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
 
 test "parse format" {
     // try getApplications(std.heap.c_allocator, "/home/andrew/.nix-profile/share/");
-    try indexApplications(std.heap.c_allocator);
+    _ = try _indexApplications();
 }

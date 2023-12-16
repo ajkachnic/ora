@@ -31,8 +31,11 @@ const state = struct {
 
     var buffer: TextBuffer = undefined;
 
-    var launcher: tools.Launcher = undefined;
+    var launcher: *tools.Launcher = undefined;
     var candidates: std.ArrayList(tools.Candidate) = undefined;
+
+    var pool: xev.ThreadPool = undefined;
+    var loop: xev.Loop = undefined;
 };
 
 fn oom() noreturn {
@@ -54,7 +57,9 @@ fn init() !void {
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
     };
 
-    state.launcher = tools.Launcher{};
+    state.launcher = try std.heap.c_allocator.create(tools.Launcher);
+    state.launcher.* = tools.Launcher{};
+    try state.launcher.runTasks(&state.loop, &state.pool);
     state.candidates = std.ArrayList(tools.Candidate).init(std.heap.c_allocator);
 
     state.ctx = try DrawingContext.init();
@@ -110,6 +115,7 @@ fn frame(w: glfw.Window) !void {
         dy += metrics.lineh;
 
         for (state.candidates.items) |candidate| {
+            if (candidate.score == 0) continue;
             _ = ctx.text.drawText(dx, dy, candidate.text);
             dy += metrics.lineh;
         }
@@ -192,12 +198,12 @@ pub fn main() !void {
     const window = setupGLFW();
     defer window.destroy();
 
-    var pool = xev.ThreadPool.init(.{});
-    defer pool.deinit();
-    defer pool.shutdown();
+    state.pool = xev.ThreadPool.init(.{});
+    defer state.pool.deinit();
+    defer state.pool.shutdown();
 
-    var loop = try xev.Loop.init(.{});
-    defer loop.deinit();
+    state.loop = try xev.Loop.init(.{});
+    defer state.loop.deinit();
 
     init() catch {
         std.log.err("Failed to initalize program", .{});
@@ -209,7 +215,7 @@ pub fn main() !void {
     window.setKeyCallback(handleKey);
 
     while (!window.shouldClose()) {
-        try loop.run(.no_wait);
+        try state.loop.run(.no_wait);
         try frame(window);
         window.swapBuffers();
         glfw.pollEvents();

@@ -15,7 +15,7 @@ buffer: std.ArrayList(u8),
 /// Cursor position
 cursor: usize = 0,
 
-dirty: bool = false,
+dirty: bool = true,
 
 const Self = @This();
 
