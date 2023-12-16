@@ -6,6 +6,7 @@
 const sokol = @import("sokol");
 const std = @import("std");
 const glfw = @import("mach-glfw");
+const xev = @import("xev");
 
 const slog = sokol.log;
 const sg = sokol.gfx;
@@ -19,6 +20,8 @@ const fontstash = @import("fontstash.zig");
 const TextBuffer = @import("TextBuffer.zig");
 const tools = @import("tools.zig");
 pub const search = @import("search.zig");
+
+pub const app = @import("tools/application.zig");
 
 const state = struct {
     var pass_action = sg.PassAction{};
@@ -188,6 +191,14 @@ pub fn setupGLFW() glfw.Window {
 pub fn main() !void {
     const window = setupGLFW();
     defer window.destroy();
+
+    var pool = xev.ThreadPool.init(.{});
+    defer pool.deinit();
+    defer pool.shutdown();
+
+    var loop = try xev.Loop.init(.{});
+    defer loop.deinit();
+
     init() catch {
         std.log.err("Failed to initalize program", .{});
         std.process.exit(1);
@@ -198,6 +209,7 @@ pub fn main() !void {
     window.setKeyCallback(handleKey);
 
     while (!window.shouldClose()) {
+        try loop.run(.no_wait);
         try frame(window);
         window.swapBuffers();
         glfw.pollEvents();
