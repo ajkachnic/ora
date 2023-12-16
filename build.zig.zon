@@ -1,0 +1,24 @@
+.{
+    .name = "ora",
+    .version = "0.1.0",
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+        "README.md",
+    },
+    .dependencies = .{
+        .sokol = .{
+            .url = "git+https://github.com/ajkachnic/sokol-zig.git#e1e1eb19d0a2e4756b69cc9578a0aee9deb5597e",
+            .hash = "122089cd878c15db0698668efd78235f0460a194d67ab7a382ec736d1d4acd10ef2d",
+        },
+        .xev = .{
+            .url = "git+https://github.com/mitchellh/libxev.git#7eada4333c36b3e16f4dc2abad707149ef7b6de5",
+            .hash = "1220be2c7b3f3a07b9150720140c7038f454a9ce0cbc5d303767c1e4a50856ec1b01",
+        },
+        .mach_glfw = .{
+            .url = "git+https://github.com/ajkachnic/mach-glfw.git#1eb6b05af03dfaedf661e3fc76329893cea0e7a7",
+            .hash = "12204779ba2f14b46f569110f774d5c3f48b7a105b6717e668bc410710bceae62072",
+        },
+    },
+}
