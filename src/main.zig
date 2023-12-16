@@ -156,6 +156,7 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
 fn cleanup() void {
     sgl.shutdown();
     sg.shutdown();
+    glfw.terminate();
 }
 
 /// Default GLFW error handling callback
@@ -163,12 +164,11 @@ fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
 
-pub fn main() !void {
+pub fn setupGLFW() glfw.Window {
     if (!glfw.init(.{})) {
         std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
         std.process.exit(1);
     }
-    defer glfw.terminate();
 
     const window = glfw.Window.create(640, 640, "ora", null, null, .{
         .resizable = false,
@@ -177,12 +177,17 @@ pub fn main() !void {
         std.log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
         std.process.exit(1);
     };
-    defer window.destroy();
 
     glfw.makeContextCurrent(window);
     glfw.swapInterval(1);
     window.show();
 
+    return window;
+}
+
+pub fn main() !void {
+    const window = setupGLFW();
+    defer window.destroy();
     init() catch {
         std.log.err("Failed to initalize program", .{});
         std.process.exit(1);
