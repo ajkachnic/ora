@@ -46,6 +46,9 @@ pub fn addDependencies(
         .optimize = optimize,
     });
 
+    const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize });
+    step.addModule("xev", xev.module("xev"));
+
     step.linkLibC();
     step.addIncludePath(.{ .path = "include/sokol_gp/" });
     step.addIncludePath(.{ .path = "include/sokol/" });
