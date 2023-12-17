@@ -55,11 +55,14 @@ pub const Launcher = struct {
         const pattern = Pattern.init(q, .{ .case_sensitive = false });
 
         for (self.applications) |app| {
-            try candidates.append(.{
-                .text = app.name,
-                .action = app.exec,
-                .score = pattern.matchExact(app.name),
-            });
+            const score = pattern.matchExact(app.name);
+            if (score > 0) {
+                try candidates.append(.{
+                    .text = app.name,
+                    .action = app.exec,
+                    .score = score,
+                });
+            }
         }
     }
 };

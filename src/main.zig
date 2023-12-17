@@ -31,6 +31,8 @@ pub const state = struct {
 
     var launcher: tools.Launcher = undefined;
     var candidates: std.ArrayList(tools.Candidate) = undefined;
+    var selection: usize = 0;
+    var blink_timer: f32 = 0;
 
     var pool: xev.ThreadPool = undefined;
     var loop: xev.Loop = undefined;
@@ -42,18 +44,12 @@ fn oom() noreturn {
 }
 
 fn init() !void {
-    sg.setup(.{
-        // .context = sgapp.context(),
-        .logger = .{ .func = slog.func },
-    });
-
-    sgl.setup(.{
-        .logger = .{ .func = slog.func },
-    });
+    sg.setup(.{ .logger = .{ .func = slog.func } });
+    sgl.setup(.{ .logger = .{ .func = slog.func } });
 
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+        .clear_value = .{ .r = 0.02, .g = 0.02, .b = 0.02, .a = 1 },
     };
 
     state.launcher = tools.Launcher.init(state.gpa.allocator());
@@ -74,14 +70,20 @@ fn sort(_: void, lhs: tools.Candidate, rhs: tools.Candidate) bool {
     return lhs.score > rhs.score;
 }
 
-fn frame(w: glfw.Window) !void {
+const blink_period = 1.2;
+
+fn frame(w: glfw.Window, frame_time: i64) !void {
     if (state.buffer.dirty) {
         state.candidates.clearRetainingCapacity();
 
         const start = std.time.nanoTimestamp();
         try state.launcher.generate(state.buffer.buffer.items, &state.candidates);
-        std.log.info("generated candiates: {d}ms", .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - start)) / 100_000});
+        std.log.debug("generated candiates: {d}ms", .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - start)) / 100_000});
     }
+
+    if (state.blink_timer > blink_period) state.blink_timer = 0;
+    state.blink_timer += @as(f32, @floatFromInt(frame_time)) / 1000;
+    if (state.blink_timer > blink_period) state.blink_timer = 0;
 
     std.sort.block(tools.Candidate, state.candidates.items, {}, sort);
 
@@ -96,6 +98,7 @@ fn frame(w: glfw.Window) !void {
     ctx.shape.beginFrame(size.width, size.height);
 
     ctx.text.clearState();
+    ctx.text.setAlign(.left, .middle);
 
     sgl.defaults();
     sgl.matrixModeProjection();
@@ -105,27 +108,46 @@ fn frame(w: glfw.Window) !void {
     ctx.text.setSize(24 * dpis);
 
     const dx = 24;
-    var dy: f32 = 24;
+    var dy: f32 = 32;
 
     if (state.buffer.buffer.items.len > 0) {
         ctx.text.setColor(white);
         _ = ctx.text.drawText(dx, dy, state.buffer.buffer.items);
 
-        dy += metrics.lineh;
+        // draw cursor
+        if (state.blink_timer > blink_period / 2.0) {
+            const cursor_position = ctx.text.textBounds(state.buffer.buffer.items[0..state.buffer.cursor]) + dx;
+            ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
+            ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
+        }
 
-        for (state.candidates.items) |candidate| {
-            if (candidate.score == 0) continue;
-            _ = ctx.text.drawText(dx, dy, candidate.text);
-            dy += metrics.lineh;
+        dy += metrics.lineh * 1.25;
+
+        const temp_selection = std.math.clamp(state.selection, 0, @min(10, state.candidates.items.len -| 1));
+
+        for (state.candidates.items, 0..) |candidate, i| {
+            const inner_padding = metrics.lineh * 2;
+
+            if (temp_selection == i) {
+                ctx.shape.setColor(0.05, 0.05, 0.05, 1.0);
+                ctx.shape.fillRect(
+                    dx,
+                    dy,
+                    @floatFromInt(size.width - dx * 2),
+                    inner_padding,
+                );
+            }
+
+            _ = ctx.text.drawText(dx, dy + inner_padding * 0.5, candidate.text);
+            dy += inner_padding + metrics.lineh * 0.125;
+
+            if (i >= 9) break;
         }
     } else {
         // placeholder
         ctx.text.setColor(gray);
-        _ = ctx.text.drawText(24, 24, "Search for applications...");
+        _ = ctx.text.drawText(dx, dy, "Search for applications...");
     }
-
-    ctx.shape.setColor(1.0, 1.0, 0.3, 1.0);
-    ctx.shape.fillRect(200, 200, 150, 400);
 
     ctx.text.flush();
 
@@ -157,6 +179,8 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
         },
         .left => state.buffer.moveCursor(.left),
         .right => state.buffer.moveCursor(.right),
+        .down => state.selection = std.math.clamp(state.selection + 1, 0, state.candidates.items.len -| 1),
+        .up => state.selection -|= 1,
         else => {},
     }
 }
@@ -226,11 +250,16 @@ pub fn main() !void {
     window.setCharCallback(handleChar);
     window.setKeyCallback(handleKey);
 
+    var time = std.time.milliTimestamp();
+
     while (!window.shouldClose()) {
+        const new_time = std.time.milliTimestamp();
         try state.loop.run(.no_wait);
-        try frame(window);
+        try frame(window, new_time - time);
         window.swapBuffers();
         glfw.pollEvents();
+
+        time = new_time;
     }
 }
 

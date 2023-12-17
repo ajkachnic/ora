@@ -36,7 +36,7 @@ pub fn indexApplications(allocator: std.mem.Allocator) []Application {
     }
 
     return applications.toOwnedSlice() catch {
-        @panic("out of memory");
+        @panic("oom");
     };
 }
 

@@ -16,7 +16,6 @@ pub const Rect = struct {
 
 pub const ShapeContext = struct {
     pub fn init() !ShapeContext {
-        std.log.info("initalizing shape", .{});
         c.sgp_setup(&.{});
         if (!c.sgp_is_valid()) {
             return error.Failed;

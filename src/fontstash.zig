@@ -19,12 +19,26 @@ pub const VerticalMetrics = struct {
     lineh: f32,
 };
 
+const AlignHorizontal = enum(c_int) {
+    // Horizontal align
+    left = 1 << 0, // Default
+    center = 1 << 1,
+    right = 1 << 2,
+};
+
+const AlignVertical = enum(c_int) {
+    // Vertical align
+    top = 1 << 3,
+    middle = 1 << 4,
+    bottom = 1 << 5,
+    baseline = 1 << 6, // Default
+};
+
 pub const Context = struct {
     inner: ?*c.FONScontext,
 
     pub fn init(desc: fons.Desc) Context {
         const inner: ?*c.FONScontext = @ptrCast(fons.create(desc));
-        std.log.info("\ncreated context: 0x{x}", .{@intFromPtr(inner)});
         return Context{ .inner = inner };
     }
 
@@ -83,6 +97,20 @@ pub const Context = struct {
         return c.fonsDrawText(self.inner, dx, dy, text.ptr, @ptrFromInt(
             @intFromPtr(text.ptr) + text.len,
         ));
+    }
+
+    pub fn textBounds(self: *const Context, text: []const u8) f32 {
+        return c.fonsTextBounds(self.inner, 0, 0, text.ptr, @ptrFromInt(
+            @intFromPtr(text.ptr) + text.len,
+        ), null);
+    }
+
+    pub fn setAlign(
+        self: *const Context,
+        horizontal: AlignHorizontal,
+        vertical: AlignVertical,
+    ) void {
+        c.fonsSetAlign(self.inner, @intFromEnum(horizontal) | @intFromEnum(vertical));
     }
 
     pub fn clearState(ctx: *const Context) void {
