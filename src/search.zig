@@ -15,44 +15,6 @@ const MAX_BITS = 63;
 
 const Alphabet = struct {};
 
-// pub const PatternA = struct {
-//     length: usize,
-//     masks: std.AutoHashMap(u8, usize),
-
-//     pub fn init(pattern: []const u8) !Pattern {
-//         if (pattern.len == 0 or pattern.len >= MAX_BITS) {
-//             return error.InvalidPattern;
-//         }
-
-//         var length: usize = 0;
-//         var masks = std.AutoHashMap(u8, usize).init(std.heap.c_allocator);
-
-//         var i: usize = 0;
-//         for (pattern) |ch| {
-//             if (masks.get(ch)) |mask| {
-//                 masks.put(ch, mask & (1 << i));
-//             } else {
-//                 masks.put(ch, !(1 << i));
-//             }
-
-//             length += 1;
-//             i += 1;
-//         }
-
-//         return Pattern{ .length = length, .masks = masks };
-//     }
-
-//     pub fn deinit(self: *Pattern) void {
-//         self.masks.deinit();
-//     }
-// };
-
-// pub fn levenstein(mask: usize, pattern_length: usize, max_distance: usize) !void {
-//     _ = max_distance;
-//     _ = pattern_length;
-//     _ = mask;
-// }
-
 pub const Pattern = CustomPattern(u8, 63);
 
 pub fn CustomPattern(

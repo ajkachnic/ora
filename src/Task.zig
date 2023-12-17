@@ -37,20 +37,18 @@ pub fn Job(comptime I: type, comptime O: type) type {
             user_context: C,
             callback: *const fn (C, O) void,
         ) !void {
-            var completion = try self.allocator.create(xev.Completion);
-            _ = &completion;
+            const completion = try self.allocator.create(xev.Completion);
             const Context = struct {
                 user_context: C,
                 callback: *const fn (C, O) void,
                 self: *Self,
             };
-            var context = try self.allocator.create(Context);
+            const context = try self.allocator.create(Context);
             context.* = .{
                 .user_context = user_context,
                 .callback = callback,
                 .self = self,
             };
-            _ = &context;
 
             const cb = struct {
                 fn wrapper(
@@ -69,7 +67,6 @@ pub fn Job(comptime I: type, comptime O: type) type {
                         allocator.destroy(ctx.self);
                         allocator.destroy(ctx);
                     }
-
                     return .disarm;
                 }
             }.wrapper;
