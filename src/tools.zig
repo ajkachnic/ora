@@ -18,6 +18,11 @@ pub const Launcher = struct {
     ready: bool = false,
     applications: []const application.Application = &.{},
     job: *Task.Job(std.mem.Allocator, []application.Application) = undefined,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) Launcher {
+        return Launcher{ .allocator = allocator };
+    }
 
     fn callback(self: *Launcher, output: []application.Application) void {
         self.applications = output;
@@ -25,21 +30,21 @@ pub const Launcher = struct {
 
     pub fn deinit(self: *Launcher) void {
         for (self.applications) |app| {
-            app.deinit(main.state.gpa.allocator());
+            app.deinit(self.allocator);
         }
 
-        main.state.gpa.allocator().free(self.applications);
+        self.allocator.free(self.applications);
     }
 
     pub fn runTasks(
         self: *Launcher,
     ) !void {
         self.job = try Task.spawnBlocking(
-            main.state.gpa.allocator(),
+            self.allocator,
             std.mem.Allocator,
             []application.Application,
             application.indexApplications,
-            main.state.gpa.allocator(),
+            self.allocator,
         );
 
         try self.job.wait(*Launcher, self, &callback);

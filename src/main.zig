@@ -29,7 +29,7 @@ pub const state = struct {
 
     var buffer: TextBuffer = undefined;
 
-    var launcher: *tools.Launcher = undefined;
+    var launcher: tools.Launcher = undefined;
     var candidates: std.ArrayList(tools.Candidate) = undefined;
 
     var pool: xev.ThreadPool = undefined;
@@ -56,9 +56,9 @@ fn init() !void {
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
     };
 
-    state.launcher = try state.gpa.allocator().create(tools.Launcher);
-    state.launcher.* = tools.Launcher{};
+    state.launcher = tools.Launcher.init(state.gpa.allocator());
     try state.launcher.runTasks();
+
     state.candidates = std.ArrayList(tools.Candidate).init(state.gpa.allocator());
 
     state.ctx = try DrawingContext.init();
@@ -167,11 +167,11 @@ fn cleanup() void {
 
     // de-allocate memory
     const allocator = state.gpa.allocator();
+    _ = allocator;
 
     state.buffer.deinit();
     state.candidates.deinit();
     state.launcher.deinit();
-    allocator.destroy(state.launcher);
 }
 
 /// Default GLFW error handling callback
