@@ -14,6 +14,14 @@ pub const Rect = struct {
     y: i32,
 };
 
+pub const BlendMode = enum(c.sgp_blend_mode) {
+    none = 0,
+    blend,
+    add,
+    mod,
+    mul,
+};
+
 pub const ShapeContext = struct {
     pub fn init() !ShapeContext {
         c.sgp_setup(&.{});
@@ -22,6 +30,10 @@ pub const ShapeContext = struct {
         }
 
         return ShapeContext{};
+    }
+
+    pub fn setBlendMode(_: *ShapeContext, mode: BlendMode) void {
+        c.sgp_set_blend_mode(@intFromEnum(mode));
     }
 
     pub fn beginFrame(_: *ShapeContext, width: u32, height: u32) void {

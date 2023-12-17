@@ -49,7 +49,7 @@ fn init() !void {
 
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0.02, .g = 0.02, .b = 0.02, .a = 1 },
+        .clear_value = .{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 0.95 },
     };
 
     state.launcher = tools.Launcher.init(state.gpa.allocator());
@@ -96,6 +96,7 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
     const metrics = ctx.text.verticalMetrics();
 
     ctx.shape.beginFrame(size.width, size.height);
+    ctx.shape.setBlendMode(.blend);
 
     ctx.text.clearState();
     ctx.text.setAlign(.left, .middle);
@@ -110,16 +111,16 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
     const dx = 24;
     var dy: f32 = 32;
 
+    // draw cursor
+    if (state.blink_timer > blink_period / 2.0) {
+        const cursor_position = ctx.text.textBounds(state.buffer.buffer.items[0..state.buffer.cursor]) + dx;
+        ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
+        ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
+    }
+
     if (state.buffer.buffer.items.len > 0) {
         ctx.text.setColor(white);
         _ = ctx.text.drawText(dx, dy, state.buffer.buffer.items);
-
-        // draw cursor
-        if (state.blink_timer > blink_period / 2.0) {
-            const cursor_position = ctx.text.textBounds(state.buffer.buffer.items[0..state.buffer.cursor]) + dx;
-            ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
-            ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
-        }
 
         dy += metrics.lineh * 1.25;
 
@@ -129,7 +130,7 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
             const inner_padding = metrics.lineh * 2;
 
             if (temp_selection == i) {
-                ctx.shape.setColor(0.05, 0.05, 0.05, 1.0);
+                ctx.shape.setColor(1, 1, 1, 0.1);
                 ctx.shape.fillRect(
                     dx,
                     dy,
@@ -168,7 +169,6 @@ fn handleChar(w: glfw.Window, codepoint: u21) void {
 }
 
 fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, mods: glfw.Mods) void {
-    _ = w;
     _ = scancode;
     _ = mods;
 
@@ -181,6 +181,7 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
         .right => state.buffer.moveCursor(.right),
         .down => state.selection = std.math.clamp(state.selection + 1, 0, state.candidates.items.len -| 1),
         .up => state.selection -|= 1,
+        .escape => w.setShouldClose(true),
         else => {},
     }
 }
@@ -203,6 +204,24 @@ fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
 
+fn centerWindow(w: glfw.Window) void {
+    const size = w.getSize();
+
+    if (glfw.Monitor.getPrimary()) |primary| {
+        const workarea = primary.getWorkarea();
+
+        std.log.info(
+            "{d}x{d} ({d}, {d})",
+            .{ workarea.width, workarea.height, workarea.x, workarea.y },
+        );
+
+        w.setPos(.{
+            .x = @intCast(@divFloor(workarea.width, 2) - @divFloor(size.width, 2)),
+            .y = @intCast(@divFloor(workarea.height, 2) - @divFloor(size.height, 2)),
+        });
+    }
+}
+
 pub fn setupGLFW() glfw.Window {
     if (!glfw.init(.{})) {
         std.log.err("failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
@@ -212,10 +231,15 @@ pub fn setupGLFW() glfw.Window {
     const window = glfw.Window.create(640, 640, "ora", null, null, .{
         .resizable = false,
         .decorated = false,
+        .floating = true,
+        .focus_on_show = true,
+        .transparent_framebuffer = true,
     }) orelse {
         std.log.err("failed to create GLFW window: {?s}", .{glfw.getErrorString()});
         std.process.exit(1);
     };
+
+    centerWindow(window);
 
     glfw.makeContextCurrent(window);
     glfw.swapInterval(1);
