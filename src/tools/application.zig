@@ -11,44 +11,45 @@ pub const Job = struct {
     done: bool = false,
 };
 
-pub fn indexApplications(
-    allocator: std.mem.Allocator,
-    pool: *xev.ThreadPool,
-) !*Job {
-    const wg = try xev.Async.init();
-    const task = Task{ .callback = &wrapper };
+// pub fn indexApplications(
+//     allocator: std.mem.Allocator,
+//     pool: *xev.ThreadPool,
+// ) !*Job {
+//     const wg = try xev.Async.init();
+//     const task = Task{ .callback = &wrapper };
 
-    var job = try allocator.create(Job);
-    job.* = Job{
-        .task = task,
-        .allocator = allocator,
-        .wg = wg,
-    };
+//     var job = try allocator.create(Job);
+//     job.* = Job{
+//         .task = task,
+//         .allocator = allocator,
+//         .wg = wg,
+//     };
 
-    const batch = xev.ThreadPool.Batch.from(&job.task);
-    pool.schedule(batch);
+//     const batch = xev.ThreadPool.Batch.from(&job.task);
+//     pool.schedule(batch);
 
-    return job;
-}
+//     return job;
+// }
 
-fn wrapper(task: *Task) void {
-    var job = @fieldParentPtr(Job, "task", task);
+// fn wrapper(task: *Task) void {
+//     var job = @fieldParentPtr(Job, "task", task);
 
-    job.results = _indexApplications() catch |err| {
-        std.log.err("failed to index: {}", .{err});
-        return;
-    };
-    std.log.info("completed search", .{});
-    job.done = true;
-    job.wg.notify() catch |err| {
-        std.log.err("failed to notify: {}", .{err});
-    };
-}
+//     job.results = _indexApplications() catch |err| {
+//         std.log.err("failed to index: {}", .{err});
+//         return;
+//     };
+//     std.log.info("completed search", .{});
+//     job.done = true;
+//     job.wg.notify() catch |err| {
+//         std.log.err("failed to notify: {}", .{err});
+//     };
+// }
 
-pub fn _indexApplications() ![]Application {
+pub fn _indexApplications(_: void) []Application {
     const allocator = std.heap.c_allocator;
     const data_dirs = std.os.getenv("XDG_DATA_DIRS") orelse {
-        return error.ApplcationsUnavailable;
+        std.log.warn("couldn't find XDG_DATA_DIRS", .{});
+        return &.{};
     };
     var applications = std.ArrayList(Application).init(allocator);
     var iter = std.mem.splitScalar(u8, data_dirs, ':');
@@ -67,7 +68,9 @@ pub fn _indexApplications() ![]Application {
         app.*.icon = if (map.get(app.*.icon)) |i| i.path else "";
     }
 
-    return try applications.toOwnedSlice();
+    return applications.toOwnedSlice() catch {
+        @panic("out of memory");
+    };
 }
 
 pub const DesiredSize = 32;
@@ -218,5 +221,5 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
 
 test "parse format" {
     // try getApplications(std.heap.c_allocator, "/home/andrew/.nix-profile/share/");
-    _ = try _indexApplications();
+    _ = _indexApplications({});
 }

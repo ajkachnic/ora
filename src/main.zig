@@ -20,6 +20,7 @@ const fontstash = @import("fontstash.zig");
 const TextBuffer = @import("TextBuffer.zig");
 const tools = @import("tools.zig");
 pub const search = @import("search.zig");
+const Task = @import("Task.zig");
 
 pub const app = @import("tools/application.zig");
 
@@ -59,7 +60,7 @@ fn init() !void {
 
     state.launcher = try std.heap.c_allocator.create(tools.Launcher);
     state.launcher.* = tools.Launcher{};
-    try state.launcher.runTasks(&state.loop, &state.pool);
+    try state.launcher.runTasks();
     state.candidates = std.ArrayList(tools.Candidate).init(std.heap.c_allocator);
 
     state.ctx = try DrawingContext.init();
@@ -204,6 +205,8 @@ pub fn main() !void {
 
     state.loop = try xev.Loop.init(.{});
     defer state.loop.deinit();
+
+    Task.initialize(&state.loop, &state.pool);
 
     init() catch {
         std.log.err("Failed to initalize program", .{});
