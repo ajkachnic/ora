@@ -1,6 +1,8 @@
 const std = @import("std");
 const xev = @import("xev");
 
+const main = @import("main.zig");
+
 const Pattern = @import("search.zig").Pattern;
 
 const application = @import("tools/application.zig");
@@ -15,29 +17,32 @@ pub const Candidate = struct {
 pub const Launcher = struct {
     ready: bool = false,
     applications: []const application.Application = &.{},
-    // job: *application.Job = undefined,
-    job: *Task.Job(void, []application.Application) = undefined,
-    // completion: xev.Completion = undefined,
+    job: *Task.Job(std.mem.Allocator, []application.Application) = undefined,
 
     fn callback(self: *Launcher, output: []application.Application) void {
         self.applications = output;
+    }
+
+    pub fn deinit(self: *Launcher) void {
+        for (self.applications) |app| {
+            app.deinit(main.state.gpa.allocator());
+        }
+
+        main.state.gpa.allocator().free(self.applications);
     }
 
     pub fn runTasks(
         self: *Launcher,
     ) !void {
         self.job = try Task.spawnBlocking(
-            std.heap.c_allocator,
-            void,
+            main.state.gpa.allocator(),
+            std.mem.Allocator,
             []application.Application,
-            application._indexApplications,
-            {},
+            application.indexApplications,
+            main.state.gpa.allocator(),
         );
 
         try self.job.wait(*Launcher, self, &callback);
-        // self.job = try application.indexApplications(std.heap.c_allocator, pool);
-
-        // self.job.wg.wait(loop, &self.completion, Launcher, self, callback);
     }
 
     pub fn generate(self: *Launcher, query: []const u8, candidates: *std.ArrayList(Candidate)) !void {

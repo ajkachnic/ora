@@ -11,42 +11,7 @@ pub const Job = struct {
     done: bool = false,
 };
 
-// pub fn indexApplications(
-//     allocator: std.mem.Allocator,
-//     pool: *xev.ThreadPool,
-// ) !*Job {
-//     const wg = try xev.Async.init();
-//     const task = Task{ .callback = &wrapper };
-
-//     var job = try allocator.create(Job);
-//     job.* = Job{
-//         .task = task,
-//         .allocator = allocator,
-//         .wg = wg,
-//     };
-
-//     const batch = xev.ThreadPool.Batch.from(&job.task);
-//     pool.schedule(batch);
-
-//     return job;
-// }
-
-// fn wrapper(task: *Task) void {
-//     var job = @fieldParentPtr(Job, "task", task);
-
-//     job.results = _indexApplications() catch |err| {
-//         std.log.err("failed to index: {}", .{err});
-//         return;
-//     };
-//     std.log.info("completed search", .{});
-//     job.done = true;
-//     job.wg.notify() catch |err| {
-//         std.log.err("failed to notify: {}", .{err});
-//     };
-// }
-
-pub fn _indexApplications(_: void) []Application {
-    const allocator = std.heap.c_allocator;
+pub fn indexApplications(allocator: std.mem.Allocator) []Application {
     const data_dirs = std.os.getenv("XDG_DATA_DIRS") orelse {
         std.log.warn("couldn't find XDG_DATA_DIRS", .{});
         return &.{};
@@ -65,7 +30,9 @@ pub fn _indexApplications(_: void) []Application {
     }
 
     for (applications.items) |*app| {
-        app.*.icon = if (map.get(app.*.icon)) |i| i.path else "";
+        app.*.iconPath = if (map.get(app.*.icon)) |i| allocator.dupe(u8, i.path) catch {
+            @panic("oom");
+        } else "";
     }
 
     return applications.toOwnedSlice() catch {
@@ -165,6 +132,14 @@ pub const Application = struct {
     name: []const u8 = "",
     exec: []const u8 = "",
     icon: []const u8 = "",
+    iconPath: []const u8 = "",
+
+    pub fn deinit(self: *const Application, allocator: std.mem.Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.exec);
+        allocator.free(self.icon);
+        allocator.free(self.iconPath);
+    }
 };
 
 // crude parser for the .desktop format
@@ -174,6 +149,7 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
         allocator,
         1024 * 1024 * 1024,
     );
+    defer allocator.free(contents);
 
     var application = Application{};
     if (std.mem.indexOf(u8, contents, "[Desktop Entry]")) |start| {
@@ -214,12 +190,9 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
         .exec = try allocator.dupe(u8, application.exec),
     };
 
-    allocator.free(contents);
-
     return app;
 }
 
 test "parse format" {
-    // try getApplications(std.heap.c_allocator, "/home/andrew/.nix-profile/share/");
-    _ = _indexApplications({});
+    _ = indexApplications(std.testing.allocator);
 }

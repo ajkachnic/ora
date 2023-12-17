@@ -17,14 +17,11 @@ const math = std.math;
 
 const DrawingContext = @import("DrawingContext.zig");
 const fontstash = @import("fontstash.zig");
+const Task = @import("Task.zig");
 const TextBuffer = @import("TextBuffer.zig");
 const tools = @import("tools.zig");
-pub const search = @import("search.zig");
-const Task = @import("Task.zig");
 
-pub const app = @import("tools/application.zig");
-
-const state = struct {
+pub const state = struct {
     var pass_action = sg.PassAction{};
 
     var ctx: DrawingContext = undefined;
@@ -37,6 +34,7 @@ const state = struct {
 
     var pool: xev.ThreadPool = undefined;
     var loop: xev.Loop = undefined;
+    pub var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
 };
 
 fn oom() noreturn {
@@ -58,16 +56,16 @@ fn init() !void {
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
     };
 
-    state.launcher = try std.heap.c_allocator.create(tools.Launcher);
+    state.launcher = try state.gpa.allocator().create(tools.Launcher);
     state.launcher.* = tools.Launcher{};
     try state.launcher.runTasks();
-    state.candidates = std.ArrayList(tools.Candidate).init(std.heap.c_allocator);
+    state.candidates = std.ArrayList(tools.Candidate).init(state.gpa.allocator());
 
     state.ctx = try DrawingContext.init();
     state.font = state.ctx.text.load("sans", "Geist-Regular.ttf") orelse @panic("failed to load font!");
 
     state.buffer = TextBuffer.from(
-        std.heap.c_allocator,
+        state.gpa.allocator(),
         "",
     ) catch oom();
 }
@@ -166,7 +164,14 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
 fn cleanup() void {
     sgl.shutdown();
     sg.shutdown();
-    glfw.terminate();
+
+    // de-allocate memory
+    const allocator = state.gpa.allocator();
+
+    state.buffer.deinit();
+    state.candidates.deinit();
+    state.launcher.deinit();
+    allocator.destroy(state.launcher);
 }
 
 /// Default GLFW error handling callback
@@ -197,7 +202,11 @@ pub fn setupGLFW() glfw.Window {
 
 pub fn main() !void {
     const window = setupGLFW();
+    defer glfw.terminate();
     defer window.destroy();
+
+    state.gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = state.gpa.deinit();
 
     state.pool = xev.ThreadPool.init(.{});
     defer state.pool.deinit();
