@@ -36,7 +36,7 @@ pub const state = struct {
     var loop: xev.Loop = undefined;
     pub var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
 
-    var test_image: *ImageView = undefined;
+    var icons: std.StringHashMap(*ImageView) = undefined;
 };
 
 fn oom() noreturn {
@@ -49,7 +49,7 @@ fn init() !void {
 
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 0.95 },
+        .clear_value = .{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 1 },
     };
 
     state.launcher = tools.Launcher.init(state.gpa.allocator());
@@ -65,10 +65,7 @@ fn init() !void {
         "",
     ) catch oom();
 
-    state.test_image = try ImageView.init(
-        state.gpa.allocator(),
-        "/home/andrew/.nix-profile/share/icons/hicolor/32x32/apps/1password.png",
-    );
+    state.icons = std.StringHashMap(*ImageView).init(state.gpa.allocator());
 }
 
 fn sort(_: void, lhs: tools.Candidate, rhs: tools.Candidate) bool {
@@ -123,6 +120,12 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
     }
 
+    for (state.candidates.items) |candidate| {
+        if (!state.icons.contains(candidate.icon) and candidate.icon.len != 0) {
+            try state.icons.put(candidate.icon, try ImageView.init(state.gpa.allocator(), candidate.icon));
+        }
+    }
+
     if (state.buffer.buffer.items.len > 0) {
         ctx.text.setColor(white);
         _ = ctx.text.drawText(dx, dy, state.buffer.buffer.items);
@@ -144,7 +147,12 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
                 );
             }
 
-            _ = ctx.text.drawText(dx, dy + inner_padding * 0.5, candidate.text);
+            if (state.icons.get(candidate.icon)) |icon| {
+                ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
+                icon.frame(&ctx, dx + 12, dy);
+            }
+
+            _ = ctx.text.drawText(dx + 48, dy + inner_padding * 0.5, candidate.text);
             dy += inner_padding + metrics.lineh * 0.125;
 
             if (i >= 9) break;
@@ -154,8 +162,6 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         ctx.text.setColor(gray);
         _ = ctx.text.drawText(dx, dy, "Search for applications...");
     }
-
-    state.test_image.frame(&ctx);
 
     ctx.text.flush();
 
@@ -194,14 +200,21 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
 }
 
 fn cleanup() void {
-    state.test_image.deinit();
+    const allocator = state.gpa.allocator();
+    _ = allocator;
+    var iter = state.icons.iterator();
+    while (iter.next()) |entry| {
+        // allocator.free(entry.key_ptr.*);
+        entry.value_ptr.*.deinit();
+    }
+
+    state.icons.deinit();
+    ImageView.cleanup();
+
     sgl.shutdown();
     sg.shutdown();
 
     // de-allocate memory
-    const allocator = state.gpa.allocator();
-    _ = allocator;
-
     state.buffer.deinit();
     state.candidates.deinit();
     state.launcher.deinit();

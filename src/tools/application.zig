@@ -47,6 +47,14 @@ pub const Icon = struct {
     path: []const u8,
 };
 
+fn log2Diff(a: u16, b: u16) u16 {
+    const al = std.math.log2(a);
+    const bl = std.math.log2(b);
+
+    if (bl > al) return bl - al;
+    return al - bl;
+}
+
 pub fn resolveIcons(
     allocator: std.mem.Allocator,
     path: []const u8,
@@ -73,7 +81,16 @@ pub fn resolveIcons(
         const size = try getSize(fullPath);
 
         if (map.get(stem)) |v| {
-            if (v.size < DesiredSize and size > v.size) {
+            // if we already have the desired size, skip
+            // if the new icon would be smaller than the desired (and our existing), skip
+            if (v.size == DesiredSize or (size < v.size and size < DesiredSize)) continue;
+
+            const current = log2Diff(v.size, DesiredSize);
+            const potential = log2Diff(size, DesiredSize);
+
+            // icons are scaled in (roughly) powers of two
+            // log2 normalizes this difference so we can make a simple comparison
+            if (potential < current) {
                 try map.put(try allocator.dupe(u8, stem), Icon{
                     .size = size,
                     .path = fullPath,

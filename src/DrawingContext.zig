@@ -81,7 +81,7 @@ text: fontstash.Context,
 shape: ShapeContext,
 
 bounding_stack: [stack_size]BoundingBox,
-stack_position: u8,
+stack_position: u8 = 0,
 
 pub const BoundingBox = struct { x: u32 = 0, y: u32 = 0, w: u32 = 0, h: u32 = 0 };
 const stack_size = 16;
@@ -90,7 +90,11 @@ pub fn init() !Self {
     const text = fontstash.Context.init(.{ .width = 512, .height = 512 });
     const shape = try ShapeContext.init();
 
-    return Self{ .text = text, .shape = shape };
+    return Self{
+        .text = text,
+        .shape = shape,
+        .bounding_stack = .{.{}} ** stack_size,
+    };
 }
 
 pub fn pushBounds(self: *Self, box: BoundingBox) !void {

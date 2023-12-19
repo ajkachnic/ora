@@ -23,6 +23,7 @@ pub const ReadJob = runtime.Task.Job(ReadContext, []u8);
 pub fn readAll(allocator: std.mem.Allocator, path: []const u8, max_bytes: usize) !*ReadJob {
     const worker = struct {
         fn callback(ctx: ReadContext) []u8 {
+            std.log.info("readAll({s})", .{ctx.path});
             var file = File.open(ctx.path, .{}) catch |err| {
                 std.log.err("readAll() - {}", .{err});
                 return &.{};

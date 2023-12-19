@@ -10,6 +10,7 @@ const Task = @import("runtime/Task.zig");
 
 pub const Candidate = struct {
     text: []const u8,
+    icon: []const u8,
     action: []const u8,
     score: f64,
 };
@@ -61,6 +62,7 @@ pub const Launcher = struct {
                     .text = app.name,
                     .action = app.exec,
                     .score = score,
+                    .icon = app.iconPath,
                 });
             }
         }

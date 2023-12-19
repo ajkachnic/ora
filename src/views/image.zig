@@ -11,18 +11,38 @@ const c = @cImport({
     @cInclude("stb_image.h");
 });
 
+var image_map: ?std.StringHashMap(sg.Image) = null;
+
 const ImageView = @This();
 
 allocator: std.mem.Allocator,
 path: []const u8,
-job: *runtime.File.ReadJob,
+job: ?*runtime.File.ReadJob,
 buffer: ?[]u8 = null,
 handle: sg.Image,
+is_original: bool,
 
 width: c_int = 0,
 height: c_int = 0,
 
 pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
+    if (image_map == null) {
+        image_map = std.StringHashMap(sg.Image).init(allocator);
+    }
+
+    if (image_map.?.get(path)) |handle| {
+        const view = try allocator.create(ImageView);
+        view.* = .{
+            .allocator = allocator,
+            .path = path,
+            .job = null,
+            .handle = handle,
+            .is_original = false,
+        };
+
+        return view;
+    }
+
     const job = try runtime.File.readAll(allocator, path, 1024 * 1024 * 1024 * 1024);
 
     const handle = sg.allocImage();
@@ -37,6 +57,7 @@ pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
         .path = path,
         .job = job,
         .handle = handle,
+        .is_original = true,
     };
 
     try job.wait(*ImageView, view, loadedCallback);
@@ -88,17 +109,31 @@ fn loadedCallback(self: *ImageView, buffer: []u8) void {
     }
 }
 pub fn deinit(self: *ImageView) void {
-    sg.deallocImage(self.handle);
+    if (self.is_original) {
+        sg.destroyImage(self.handle);
+    }
+
+    if (self.buffer) |buffer| {
+        self.allocator.free(buffer);
+    }
+
     self.allocator.destroy(self);
 }
-pub fn frame(self: *ImageView, cx: *DrawingContext) void {
+
+pub fn frame(self: *ImageView, cx: *DrawingContext, x: f32, y: f32) void {
     if (sg.queryImageState(self.handle) != .VALID) {
         return;
     }
 
     cx.shape.setImage(0, self.handle);
-    cx.shape.fillRect(0, 0, @floatFromInt(self.width), @floatFromInt(self.height));
+    cx.shape.fillRect(x, y, @floatFromInt(self.width), @floatFromInt(self.height));
     cx.shape.unsetImage(0);
 }
 
 pub fn update() void {}
+
+pub fn cleanup() void {
+    if (image_map) |*map| {
+        map.deinit();
+    }
+}
