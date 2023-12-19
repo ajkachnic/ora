@@ -2,24 +2,7 @@
 const std = @import("std");
 const xev = @import("xev");
 
-const global = struct {
-    var loop: *xev.Loop = undefined;
-    var pool: *xev.ThreadPool = undefined;
-    var initalized = false;
-};
-
-pub fn initialize(loop: *xev.Loop, pool: *xev.ThreadPool) void {
-    global.loop = loop;
-    global.pool = pool;
-    global.initalized = true;
-}
-
-fn assertInitialized() void {
-    if (!global.initalized) {
-        std.log.err("Task not initialized. Call Task.initialzed() in main!", .{});
-        std.process.exit(1);
-    }
-}
+const runtime = @import("runtime.zig");
 
 pub fn Job(comptime I: type, comptime O: type) type {
     return struct {
@@ -57,8 +40,10 @@ pub fn Job(comptime I: type, comptime O: type) type {
                     c: *xev.Completion,
                     r: xev.ReadError!void,
                 ) xev.CallbackAction {
-                    r catch {};
                     _ = l;
+                    r catch |err| {
+                        std.log.err("read error: {}", .{err});
+                    };
                     if (s) |ctx| {
                         const allocator = ctx.self.allocator;
 
@@ -66,12 +51,14 @@ pub fn Job(comptime I: type, comptime O: type) type {
                         ctx.callback(ctx.user_context, ctx.self.output);
                         allocator.destroy(ctx.self);
                         allocator.destroy(ctx);
+                    } else {
+                        std.log.warn("wasn't passed context...", .{});
                     }
                     return .disarm;
                 }
             }.wrapper;
 
-            self.wg.wait(global.loop, completion, Context, context, cb);
+            self.wg.wait(runtime.global.loop, completion, Context, context, cb);
         }
     };
 }
@@ -85,7 +72,7 @@ pub fn spawnBlocking(
     comptime func: fn (I) O,
     input: I,
 ) !*Job(I, O) {
-    assertInitialized();
+    runtime.assertInitialized();
     const callback = struct {
         fn callback(task: *xev.ThreadPool.Task) void {
             var job = @fieldParentPtr(Job(I, O), "task", task);
@@ -106,7 +93,7 @@ pub fn spawnBlocking(
     job.input = input;
 
     const batch = xev.ThreadPool.Batch.from(&job.task);
-    global.pool.schedule(batch);
+    runtime.global.pool.schedule(batch);
 
     return job;
 }

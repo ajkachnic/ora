@@ -52,6 +52,7 @@ pub fn addDependencies(
     step.linkLibC();
     step.addIncludePath(.{ .path = "include/sokol_gp/" });
     step.addIncludePath(.{ .path = "include/sokol/" });
+    step.addIncludePath(.{ .path = "include/stb/" });
     step.addIncludePath(.{ .path = "include/fontstash/src/" });
 
     step.addModule("sokol", dep_sokol.module("sokol"));

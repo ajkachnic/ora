@@ -5,3 +5,6 @@
 #include <stdio.h>
 #include "sokol/sokol_gfx.h"
 #include "sokol_gp.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"

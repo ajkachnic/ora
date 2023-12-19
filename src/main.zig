@@ -1,8 +1,3 @@
-//------------------------------------------------------------------------------
-//  triangle.zig
-//
-//  Vertex buffer, shader, pipeline state object.
-//------------------------------------------------------------------------------
 const sokol = @import("sokol");
 const std = @import("std");
 const glfw = @import("mach-glfw");
@@ -17,9 +12,12 @@ const math = std.math;
 
 const DrawingContext = @import("DrawingContext.zig");
 const fontstash = @import("fontstash.zig");
-const Task = @import("Task.zig");
+const runtime = @import("runtime/runtime.zig");
 const TextBuffer = @import("TextBuffer.zig");
 const tools = @import("tools.zig");
+const ImageView = @import("views/image.zig");
+
+pub const io_mode = .blocking;
 
 pub const state = struct {
     var pass_action = sg.PassAction{};
@@ -37,6 +35,8 @@ pub const state = struct {
     var pool: xev.ThreadPool = undefined;
     var loop: xev.Loop = undefined;
     pub var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
+
+    var test_image: *ImageView = undefined;
 };
 
 fn oom() noreturn {
@@ -64,6 +64,11 @@ fn init() !void {
         state.gpa.allocator(),
         "",
     ) catch oom();
+
+    state.test_image = try ImageView.init(
+        state.gpa.allocator(),
+        "/home/andrew/.nix-profile/share/icons/hicolor/32x32/apps/1password.png",
+    );
 }
 
 fn sort(_: void, lhs: tools.Candidate, rhs: tools.Candidate) bool {
@@ -150,6 +155,8 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         _ = ctx.text.drawText(dx, dy, "Search for applications...");
     }
 
+    state.test_image.frame(&ctx);
+
     ctx.text.flush();
 
     sg.beginDefaultPass(state.pass_action, @intCast(size.width), @intCast(size.height));
@@ -187,6 +194,7 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
 }
 
 fn cleanup() void {
+    state.test_image.deinit();
     sgl.shutdown();
     sg.shutdown();
 
@@ -263,7 +271,7 @@ pub fn main() !void {
     state.loop = try xev.Loop.init(.{});
     defer state.loop.deinit();
 
-    Task.initialize(&state.loop, &state.pool);
+    runtime.initialize(&state.loop, &state.pool);
 
     init() catch {
         std.log.err("Failed to initalize program", .{});
@@ -285,6 +293,42 @@ pub fn main() !void {
 
         time = new_time;
     }
+}
+
+pub const std_options = struct {
+    pub const logFn = log;
+};
+
+pub fn log(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    // Ignore all non-error logging from sources other than
+    // .my_project, .nice_library and the default
+    const scope_prefix = switch (scope) {
+        std.log.default_log_scope => "",
+        else => if (@intFromEnum(level) <= @intFromEnum(std.log.Level.err))
+            "(" ++ @tagName(scope) ++ "): "
+        else
+            return,
+    };
+
+    const level_text = comptime switch (level) {
+        .info => "\x1b[34m" ++ "INFO  " ++ "\x1b[0m",
+        .err => "\x1b[31m" ++ "ERROR " ++ "\x1b[0m",
+        .debug => "\x1b[36m" ++ "DEBUG " ++ "\x1b[0m",
+        .warn => "\x1b[33m" ++ "WARN  " ++ "\x1b[0m",
+    };
+
+    const prefix = level_text ++ " " ++ scope_prefix;
+
+    // Print the message to stderr, silently ignoring any errors
+    std.debug.getStderrMutex().lock();
+    defer std.debug.getStderrMutex().unlock();
+    const stderr = std.io.getStdErr().writer();
+    nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
 }
 
 test {

@@ -6,7 +6,7 @@ const main = @import("main.zig");
 const Pattern = @import("search.zig").Pattern;
 
 const application = @import("tools/application.zig");
-const Task = @import("Task.zig");
+const Task = @import("runtime/Task.zig");
 
 pub const Candidate = struct {
     text: []const u8,

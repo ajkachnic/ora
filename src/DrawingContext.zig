@@ -60,6 +60,14 @@ pub const ShapeContext = struct {
         c.sgp_reset_state();
     }
 
+    pub fn setImage(_: *ShapeContext, channel: c_int, image: sokol.gfx.Image) void {
+        c.sgp_set_image(channel, @bitCast(image));
+    }
+
+    pub fn unsetImage(_: *ShapeContext, channel: c_int) void {
+        c.sgp_unset_image(channel);
+    }
+
     /// Render a frame. Must be called after `beginPass` and before `endPass`
     pub fn endFrame(_: *ShapeContext) void {
         c.sgp_flush();
@@ -72,9 +80,28 @@ const Self = @This();
 text: fontstash.Context,
 shape: ShapeContext,
 
+bounding_stack: [stack_size]BoundingBox,
+stack_position: u8,
+
+pub const BoundingBox = struct { x: u32 = 0, y: u32 = 0, w: u32 = 0, h: u32 = 0 };
+const stack_size = 16;
+
 pub fn init() !Self {
     const text = fontstash.Context.init(.{ .width = 512, .height = 512 });
     const shape = try ShapeContext.init();
 
     return Self{ .text = text, .shape = shape };
+}
+
+pub fn pushBounds(self: *Self, box: BoundingBox) !void {
+    if (self.stack_position >= stack_size) {
+        return error.BoundingStackOverflow;
+    }
+
+    self.stack_position += 1;
+    self.bounding_stack[self.stack_position] = box;
+}
+
+pub fn popBounds(self: *Self) !void {
+    self.stack_position -|= 1;
 }
