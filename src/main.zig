@@ -13,11 +13,12 @@ const math = std.math;
 const DrawingContext = @import("DrawingContext.zig");
 const fontstash = @import("fontstash.zig");
 const runtime = @import("runtime/runtime.zig");
-const TextBuffer = @import("TextBuffer.zig");
 const tools = @import("tools.zig");
-const ImageView = @import("views/image.zig");
 
-pub const io_mode = .blocking;
+const ImageView = @import("views/image.zig");
+const EditorView = @import("views/editor.zig");
+
+const Color = DrawingContext.Color;
 
 const geist_regular = @embedFile("assets/Geist-Regular.ttf");
 const geist_semibold = @embedFile("assets/Geist-SemiBold.ttf");
@@ -29,7 +30,7 @@ pub const state = struct {
     var font_regular: fontstash.Font = undefined;
     var font_bold: fontstash.Font = undefined;
 
-    var buffer: TextBuffer = undefined;
+    var editor: EditorView = undefined;
 
     var launcher: tools.Launcher = undefined;
     var candidates: std.ArrayList(tools.Candidate) = undefined;
@@ -65,10 +66,7 @@ fn init() !void {
     state.font_regular = state.ctx.text.add("regular", geist_regular, false) orelse @panic("failed to load font!");
     state.font_bold = state.ctx.text.add("bold", geist_semibold, false) orelse @panic("failed to load font!");
 
-    state.buffer = TextBuffer.from(
-        state.gpa.allocator(),
-        "",
-    ) catch oom();
+    state.editor = EditorView.init(state.gpa.allocator());
 
     state.icons = std.StringHashMap(*ImageView).init(state.gpa.allocator());
 }
@@ -80,11 +78,11 @@ fn sort(_: void, lhs: tools.Candidate, rhs: tools.Candidate) bool {
 const blink_period = 1.2;
 
 fn frame(w: glfw.Window, frame_time: i64) !void {
-    if (state.buffer.dirty) {
+    if (state.editor.buffer.dirty) {
         state.candidates.clearRetainingCapacity();
 
         const start = std.time.nanoTimestamp();
-        try state.launcher.generate(state.buffer.buffer.items, &state.candidates);
+        try state.launcher.generate(state.editor.buffer.text(), &state.candidates);
         std.log.debug("generated candiates: {d}ms", .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - start)) / 100_000});
     }
 
@@ -96,34 +94,27 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
 
     const dpis = 1;
     const size = w.getSize();
-    var ctx = state.ctx;
-    const white = fontstash.encode_rgba(255, 255, 255, 255);
-    const gray = fontstash.encode_rgba(80, 80, 80, 255);
+    var cx = state.ctx;
+    const white = Color.rgb(255, 255, 255);
+    const gray = Color.rgb(80, 80, 80);
 
-    const metrics = ctx.text.verticalMetrics();
+    const metrics = cx.text.verticalMetrics();
 
-    ctx.shape.beginFrame(size.width, size.height);
-    ctx.shape.setBlendMode(.blend);
+    cx.shape.beginFrame(size.width, size.height);
+    cx.shape.setBlendMode(.blend);
 
-    ctx.text.clearState();
-    ctx.text.setAlign(.left, .middle);
+    cx.text.clearState();
+    cx.text.setAlign(.left, .middle);
 
     sgl.defaults();
     sgl.matrixModeProjection();
     sgl.ortho(0.0, @floatFromInt(size.width), @floatFromInt(size.height), 0.0, -1, 1);
 
-    ctx.text.setFont(state.font_regular);
-    ctx.text.setSize(24 * dpis);
+    cx.text.setFont(state.font_regular);
+    cx.text.setSize(24 * dpis);
 
     const dx = 24;
     var dy: f32 = 32;
-
-    // draw cursor
-    if (state.blink_timer > blink_period / 2.0) {
-        const cursor_position = ctx.text.textBounds(state.buffer.buffer.items[0..state.buffer.cursor]) + dx;
-        ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
-        ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
-    }
 
     // TODO: load icons immediately, don't wait for user input
     for (state.candidates.items) |candidate| {
@@ -136,68 +127,62 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         }
     }
 
-    if (state.buffer.buffer.items.len > 0) {
-        ctx.text.setSize(24 * dpis);
-        ctx.text.setColor(white);
-        _ = ctx.text.drawText(dx, dy, state.buffer.buffer.items);
+    state.editor.frame(&cx, dx, dy);
+    dy += metrics.lineh * 1.75;
 
-        dy += metrics.lineh * 1.75;
-
+    if (state.editor.buffer.text().len > 0) {
         const temp_selection = std.math.clamp(state.selection, 0, @min(10, state.candidates.items.len -| 1));
 
-        ctx.text.setColor(gray);
-        ctx.text.setSize(20 * dpis);
-        _ = ctx.text.drawText(dx, dy, "Applications");
+        cx.setColor(gray);
+        cx.text.setSize(20 * dpis);
+        _ = cx.drawText(dx, dy, "Applications");
 
         dy += metrics.lineh * 1.125;
 
         for (state.candidates.items, 0..) |candidate, i| {
-            ctx.text.setFont(state.font_regular);
-            ctx.text.setSize(24 * dpis);
-            ctx.text.setColor(white);
+            cx.text.setFont(state.font_regular);
+            cx.text.setSize(24 * dpis);
+            cx.setColor(white);
             const inner_padding = metrics.lineh * 2;
 
+            cx.setColor(white.withAlpha(0.6));
             if (temp_selection == i) {
-                ctx.shape.setColor(1, 1, 1, 0.1);
-                ctx.shape.fillRect(
+                cx.setColor(white.withAlpha(0.1));
+                cx.shape.fillRect(
                     dx,
                     dy,
                     @floatFromInt(size.width - dx * 2),
                     inner_padding,
                 );
+                cx.setColor(white);
             }
+
+            _ = cx.drawText(dx + 48, dy + inner_padding * 0.5, candidate.text);
 
             if (state.icons.get(candidate.icon)) |icon| {
-                ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
-                icon.frame(&ctx, dx + 8, dy + inner_padding * 0.5 - 16);
+                cx.setColor(white);
+                icon.frame(&cx, dx + 8, dy + inner_padding * 0.5 - 16);
             }
-
-            _ = ctx.text.drawText(dx + 48, dy + inner_padding * 0.5, candidate.text);
             dy += inner_padding + metrics.lineh * 0.125;
 
             if (i >= 9) break;
         }
-    } else {
-        // placeholder
-        ctx.text.setColor(gray);
-        _ = ctx.text.drawText(dx, dy, "Search for applications...");
     }
 
-    ctx.text.flush();
-
     sg.beginDefaultPass(state.pass_action, @intCast(size.width), @intCast(size.height));
-    ctx.shape.endFrame();
+    cx.endFrame();
     sgl.draw();
     sg.endPass();
     sg.commit();
 
-    state.buffer.dirty = false;
+    state.editor.buffer.dirty = false;
 }
 
 fn handleChar(w: glfw.Window, codepoint: u21) void {
     _ = w;
     if (codepoint < 0xff) {
-        state.buffer.insertChar(@intCast(codepoint)) catch oom();
+        state.editor.buffer.insertChar(@intCast(codepoint)) catch oom();
+        state.selection = 0;
     }
 }
 
@@ -208,10 +193,10 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
     if (action == .release) return;
     switch (key) {
         .backspace => {
-            _ = state.buffer.removeBeforeCursor();
+            _ = state.editor.buffer.removeBeforeCursor();
         },
-        .left => state.buffer.moveCursor(.left),
-        .right => state.buffer.moveCursor(.right),
+        .left => state.editor.buffer.moveCursor(.left),
+        .right => state.editor.buffer.moveCursor(.right),
         .down => state.selection = std.math.clamp(state.selection + 1, 0, state.candidates.items.len -| 1),
         .up => state.selection -|= 1,
         .escape => w.setShouldClose(true),
@@ -272,7 +257,7 @@ fn cleanup() void {
     sg.shutdown();
 
     // de-allocate memory
-    state.buffer.deinit();
+    state.editor.deinit();
     state.candidates.deinit();
     state.launcher.deinit();
 }

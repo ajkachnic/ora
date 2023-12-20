@@ -19,14 +19,14 @@ pub const VerticalMetrics = struct {
     lineh: f32,
 };
 
-const AlignHorizontal = enum(c_int) {
+pub const AlignHorizontal = enum(c_int) {
     // Horizontal align
     left = 1 << 0, // Default
     center = 1 << 1,
     right = 1 << 2,
 };
 
-const AlignVertical = enum(c_int) {
+pub const AlignVertical = enum(c_int) {
     // Vertical align
     top = 1 << 3,
     middle = 1 << 4,

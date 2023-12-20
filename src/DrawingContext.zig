@@ -22,6 +22,27 @@ pub const BlendMode = enum(c.sgp_blend_mode) {
     mul,
 };
 
+/// RGBa where RGB are from 0-255 and alpha is from 0-1
+pub const Color = struct {
+    r: f32 = 255.0,
+    g: f32 = 255.0,
+    b: f32 = 255.0,
+    a: f32 = 1.0,
+
+    pub fn rgb(r: f32, g: f32, b: f32) Color {
+        return .{ .r = r, .g = g, .b = b };
+    }
+
+    pub fn rgba(r: f32, g: f32, b: f32, a: f32) Color {
+        return .{ .r = r, .g = g, .b = b, .a = a };
+    }
+
+    pub fn withAlpha(b: Color, a: f32) Color {
+        return .{ .r = b.r, .g = b.g, .b = b.b, .a = a };
+    }
+};
+
+/// Lightweight wrapper around sokol_gp
 pub const ShapeContext = struct {
     pub fn init() !ShapeContext {
         c.sgp_setup(&.{});
@@ -91,11 +112,11 @@ pub const BoundingBox = struct { x: u32 = 0, y: u32 = 0, w: u32 = 0, h: u32 = 0 
 const stack_size = 16;
 
 pub fn init() !Self {
-    const text = fontstash.Context.init(.{ .width = 512, .height = 512 });
+    const t = fontstash.Context.init(.{ .width = 512, .height = 512 });
     const shape = try ShapeContext.init();
 
     return Self{
-        .text = text,
+        .text = t,
         .shape = shape,
         .bounding_stack = .{.{}} ** stack_size,
     };
@@ -112,4 +133,25 @@ pub fn pushBounds(self: *Self, box: BoundingBox) !void {
 
 pub fn popBounds(self: *Self) !void {
     self.stack_position -|= 1;
+}
+
+/// Set the color using an RGBA color value
+pub fn setColor(cx: *Self, color: Color) void {
+    cx.shape.setColor(color.r / 255, color.g / 255, color.b / 255, color.a);
+    cx.text.setColor(fontstash.encode_rgba(
+        @intFromFloat(color.r),
+        @intFromFloat(color.g),
+        @intFromFloat(color.b),
+        @intFromFloat(color.a * 255),
+    ));
+}
+
+/// Render text using fontstash. Returns the vertical offset after drawing
+pub inline fn drawText(cx: *Self, dx: f32, dy: f32, t: []const u8) f32 {
+    return cx.text.drawText(dx, dy, t);
+}
+
+pub fn endFrame(cx: *Self) void {
+    cx.text.flush();
+    cx.shape.endFrame();
 }

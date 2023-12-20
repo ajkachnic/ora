@@ -77,3 +77,11 @@ pub fn moveCursor(self: *Self, m: CursorMotion) void {
         },
     }
 }
+
+/// Return a temporary slice to the contents of the buffer
+///
+/// This slice is invalid after any allocations. Don't store it,
+/// request it every time it's needed.
+pub inline fn text(self: *Self) []const u8 {
+    return self.buffer.items;
+}
