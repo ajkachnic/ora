@@ -68,6 +68,10 @@ pub const ShapeContext = struct {
         c.sgp_unset_image(channel);
     }
 
+    pub fn resetImage(_: *ShapeContext, channel: c_int) void {
+        c.sgp_reset_image(channel);
+    }
+
     /// Render a frame. Must be called after `beginPass` and before `endPass`
     pub fn endFrame(_: *ShapeContext) void {
         c.sgp_flush();

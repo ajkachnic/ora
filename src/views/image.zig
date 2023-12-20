@@ -158,13 +158,11 @@ pub fn deinit(self: *ImageView) void {
 }
 
 pub fn frame(self: *ImageView, cx: *DrawingContext, x: f32, y: f32) void {
-    if (sg.queryImageState(self.handle) != .VALID) {
-        return;
-    }
+    if (sg.queryImageState(self.handle) != .VALID) return;
 
     cx.shape.setImage(0, self.handle);
     cx.shape.fillRect(x, y, @floatFromInt(self.width), @floatFromInt(self.height));
-    cx.shape.unsetImage(0);
+    cx.shape.resetImage(0);
 }
 
 pub fn update() void {}
