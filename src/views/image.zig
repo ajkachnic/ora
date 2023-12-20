@@ -9,6 +9,7 @@ const DrawingContext = @import("../DrawingContext.zig");
 
 const c = @cImport({
     @cInclude("stb_image.h");
+    @cInclude("stb_image_resize.h");
 });
 
 var image_map: ?std.StringHashMap(sg.Image) = null;
@@ -85,29 +86,58 @@ fn loadedCallback(self: *ImageView, buffer: []u8) void {
 
     if (pixels != null) {
         var subimage = [_][16]sg.Range{[_]sg.Range{.{}} ** 16} ** 6;
-        subimage[0][0] = .{
-            .ptr = pixels,
-            .size = @intCast(width * height * 4),
-        };
+        defer c.stbi_image_free(pixels);
+        // yay we get to resize!
+        if (width != 32 or height != 32) {
+            // zig fmt: off
+            const resized = self.allocator.alloc(u8, 32 * 32 * 4) catch {
+                @panic("oom");
+            };
+            defer self.allocator.free(resized);
+            
+            _ = c.stbir_resize_uint8(
+                pixels, width, height, 0, 
+                @ptrCast(resized), 32, 32, 0, num_channels,
+            );
+            // zig fmt: on
+            width = 32;
+            height = 32;
 
-        sg.initImage(self.handle, .{
-            .width = width,
-            .height = height,
-            .pixel_format = .RGBA8,
-            .data = .{
-                .subimage = subimage,
-            },
-        });
+            subimage[0][0] = .{
+                .ptr = @ptrCast(resized),
+                .size = @intCast(width * height * 4),
+            };
 
+            sg.initImage(self.handle, .{
+                .width = width,
+                .height = height,
+                .pixel_format = .RGBA8,
+                .data = .{
+                    .subimage = subimage,
+                },
+            });
+        } else {
+            subimage[0][0] = .{
+                .ptr = pixels,
+                .size = @intCast(width * height * 4),
+            };
+
+            sg.initImage(self.handle, .{
+                .width = width,
+                .height = height,
+                .pixel_format = .RGBA8,
+                .data = .{
+                    .subimage = subimage,
+                },
+            });
+        }
         self.width = width;
         self.height = height;
-        // is this free-ing memory the sokol needs?
-        // the example showed it but i'm unsure
-        c.stbi_image_free(pixels);
     } else {
         std.log.err("parsing image buffer failed", .{});
     }
 }
+
 pub fn deinit(self: *ImageView) void {
     if (self.is_original) {
         sg.destroyImage(self.handle);

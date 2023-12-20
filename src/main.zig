@@ -49,7 +49,7 @@ fn init() !void {
 
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 1 },
+        .clear_value = .{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 0.95 },
     };
 
     state.launcher = tools.Launcher.init(state.gpa.allocator());
@@ -149,7 +149,7 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
 
             if (state.icons.get(candidate.icon)) |icon| {
                 ctx.shape.setColor(1.0, 1.0, 1.0, 1.0);
-                icon.frame(&ctx, dx + 12, dy);
+                icon.frame(&ctx, dx + 8, dy + inner_padding * 0.5 - 16);
             }
 
             _ = ctx.text.drawText(dx + 48, dy + inner_padding * 0.5, candidate.text);
