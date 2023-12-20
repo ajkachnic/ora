@@ -23,17 +23,14 @@ pub const ReadJob = runtime.Task.Job(ReadContext, []u8);
 pub fn readAll(allocator: std.mem.Allocator, path: []const u8, max_bytes: usize) !*ReadJob {
     const worker = struct {
         fn callback(ctx: ReadContext) []u8 {
-            std.log.info("readAll({s})", .{ctx.path});
             var file = File.open(ctx.path, .{}) catch |err| {
                 std.log.err("readAll() - {}", .{err});
                 return &.{};
             };
-            std.log.debug("readAll() - starting reading", .{});
             const result = file.inner.readToEndAlloc(ctx.allocator, ctx.max_bytes) catch |err| {
                 std.log.err("readAll() - {}", .{err});
                 return &.{};
             };
-            std.log.debug("readAll() - completed read", .{});
             return result;
         }
     }.callback;
