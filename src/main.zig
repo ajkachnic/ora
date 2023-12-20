@@ -200,8 +200,45 @@ fn handleKey(w: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, 
         .down => state.selection = std.math.clamp(state.selection + 1, 0, state.candidates.items.len -| 1),
         .up => state.selection -|= 1,
         .escape => w.setShouldClose(true),
+        .enter => runCommand() catch |err| {
+            std.log.err("failed to run command: {}", .{err});
+            std.process.exit(1);
+        },
         else => {},
     }
+}
+
+fn eq(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+
+fn runCommand() !void {
+    const selection = std.math.clamp(
+        state.selection,
+        0,
+        state.candidates.items.len,
+    );
+    const exec = state.candidates.items[selection].action;
+    var argv = std.ArrayList([]const u8).init(state.gpa.allocator());
+    defer argv.deinit();
+
+    // FIXME: this is a half-assed implementation of the rules. it will defintely break
+    // ref: https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-1.1.html#exec-variables
+    var iterator = std.mem.splitScalar(u8, exec, ' ');
+    while (iterator.next()) |segment| {
+        if (eq(segment, "%f") or eq(segment, "%F")) continue;
+        if (eq(segment, "%u") or eq(segment, "%U")) continue;
+        if (eq(segment, "%d") or eq(segment, "%D")) continue;
+        if (eq(segment, "%n") or eq(segment, "%N")) continue;
+
+        if (std.mem.startsWith(u8, segment, "\"")) {
+            try argv.append(segment[1 .. segment.len - 1]);
+        } else {
+            try argv.append(segment);
+        }
+    }
+
+    return std.process.execv(state.gpa.allocator(), argv.items);
 }
 
 fn cleanup() void {
