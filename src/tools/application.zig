@@ -179,24 +179,24 @@ fn parseApplication(allocator: std.mem.Allocator, dir: std.fs.Dir, path: []const
             var split = std.mem.splitScalar(u8, line, '=');
 
             const key = split.next();
-            const value = split.next();
+            const value = split.rest();
 
-            if (key == null or value == null) continue;
+            if (key == null) continue;
 
             if (std.mem.eql(u8, key.?, "Name")) {
-                application.name = value.?;
+                application.name = value;
             } else if (std.mem.eql(u8, key.?, "Exec")) {
-                application.exec = value.?;
+                application.exec = value;
             } else if (std.mem.eql(u8, key.?, "Icon")) {
-                application.icon = value.?;
+                application.icon = value;
             } else if (std.mem.eql(u8, key.?, "Type")) {
                 if (!std.mem.eql(u8, std.mem.trim(
                     u8,
-                    value.?,
+                    value,
                     " \r",
                 ), "Application")) return null;
             } else if (std.mem.eql(u8, key.?, "NoDisplay")) {
-                if (std.mem.eql(u8, value.?, "true")) return null;
+                if (std.mem.eql(u8, value, "true")) return null;
             }
         }
     }
