@@ -14,6 +14,7 @@ const DrawingContext = @import("DrawingContext.zig");
 const fontstash = @import("fontstash.zig");
 const runtime = @import("runtime/runtime.zig");
 const tools = @import("tools.zig");
+const ui = @import("ui.zig");
 
 const ImageView = @import("views/image.zig");
 const EditorView = @import("views/editor.zig");
@@ -35,7 +36,6 @@ pub const state = struct {
     var launcher: tools.Launcher = undefined;
     var candidates: std.ArrayList(tools.Candidate) = undefined;
     var selection: usize = 0;
-    var blink_timer: f32 = 0;
 
     var pool: xev.ThreadPool = undefined;
     var loop: xev.Loop = undefined;
@@ -75,43 +75,26 @@ fn sort(_: void, lhs: tools.Candidate, rhs: tools.Candidate) bool {
     return lhs.score > rhs.score;
 }
 
-const blink_period = 1.2;
+fn frame(w: glfw.Window) !void {
+    var cx = state.ctx;
+    ui.beginFrame(w, &cx);
 
-fn frame(w: glfw.Window, frame_time: i64) !void {
     if (state.editor.buffer.dirty) {
         state.candidates.clearRetainingCapacity();
-
-        const start = std.time.nanoTimestamp();
         try state.launcher.generate(state.editor.buffer.text(), &state.candidates);
-        std.log.debug("generated candiates: {d}ms", .{@as(f64, @floatFromInt(std.time.nanoTimestamp() - start)) / 100_000});
+        std.sort.block(tools.Candidate, state.candidates.items, {}, sort);
     }
 
-    if (state.blink_timer > blink_period) state.blink_timer = 0;
-    state.blink_timer += @as(f32, @floatFromInt(frame_time)) / 1000;
-    if (state.blink_timer > blink_period) state.blink_timer = 0;
-
-    std.sort.block(tools.Candidate, state.candidates.items, {}, sort);
-
-    const dpis = 1;
+    const dpis = 1.0;
     const size = w.getSize();
-    var cx = state.ctx;
-    const white = Color.rgb(255, 255, 255);
-    const gray = Color.rgb(80, 80, 80);
-
-    const metrics = cx.text.verticalMetrics();
-
-    cx.shape.beginFrame(size.width, size.height);
-    cx.shape.setBlendMode(.blend);
 
     cx.text.clearState();
     cx.text.setAlign(.left, .middle);
 
-    sgl.defaults();
-    sgl.matrixModeProjection();
-    sgl.ortho(0.0, @floatFromInt(size.width), @floatFromInt(size.height), 0.0, -1, 1);
-
     cx.text.setFont(state.font_regular);
     cx.text.setSize(24 * dpis);
+
+    const metrics = cx.text.verticalMetrics();
 
     const dx = 24;
     var dy: f32 = 32;
@@ -130,10 +113,10 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
     state.editor.frame(&cx, dx, dy);
     dy += metrics.lineh * 1.75;
 
-    if (state.editor.buffer.text().len > 0) {
+    if (!state.editor.isEmpty()) {
         const temp_selection = std.math.clamp(state.selection, 0, @min(10, state.candidates.items.len -| 1));
 
-        cx.setColor(gray);
+        cx.setColor(ui.colors.white.withAlpha(0.5));
         cx.text.setSize(20 * dpis);
         _ = cx.drawText(dx, dy, "Applications");
 
@@ -142,25 +125,25 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         for (state.candidates.items, 0..) |candidate, i| {
             cx.text.setFont(state.font_regular);
             cx.text.setSize(24 * dpis);
-            cx.setColor(white);
+            cx.setColor(ui.colors.white);
             const inner_padding = metrics.lineh * 2;
 
-            cx.setColor(white.withAlpha(0.6));
+            cx.setColor(ui.colors.white.withAlpha(0.5));
             if (temp_selection == i) {
-                cx.setColor(white.withAlpha(0.1));
+                cx.setColor(ui.colors.white.withAlpha(0.03));
                 cx.shape.fillRect(
                     dx,
                     dy,
                     @floatFromInt(size.width - dx * 2),
                     inner_padding,
                 );
-                cx.setColor(white);
+                cx.setColor(ui.colors.white);
             }
 
             _ = cx.drawText(dx + 48, dy + inner_padding * 0.5, candidate.text);
 
             if (state.icons.get(candidate.icon)) |icon| {
-                cx.setColor(white);
+                cx.setColor(ui.colors.white);
                 icon.frame(&cx, dx + 8, dy + inner_padding * 0.5 - 16);
             }
             dy += inner_padding + metrics.lineh * 0.125;
@@ -169,12 +152,7 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         }
     }
 
-    sg.beginDefaultPass(state.pass_action, @intCast(size.width), @intCast(size.height));
-    cx.endFrame();
-    sgl.draw();
-    sg.endPass();
-    sg.commit();
-
+    ui.endFrame(w, &cx, state.pass_action);
     state.editor.buffer.dirty = false;
 }
 
@@ -238,7 +216,10 @@ fn runCommand() !void {
         }
     }
 
-    return std.process.execv(state.gpa.allocator(), argv.items);
+    const err = std.process.execv(state.gpa.allocator(), argv.items);
+    std.process.cleanExit();
+
+    return err;
 }
 
 fn cleanup() void {
@@ -332,16 +313,11 @@ pub fn main() !void {
     window.setCharCallback(handleChar);
     window.setKeyCallback(handleKey);
 
-    var time = std.time.milliTimestamp();
-
     while (!window.shouldClose()) {
-        const new_time = std.time.milliTimestamp();
         try state.loop.run(.no_wait);
-        try frame(window, new_time - time);
+        try frame(window);
         window.swapBuffers();
         glfw.pollEvents();
-
-        time = new_time;
     }
 }
 

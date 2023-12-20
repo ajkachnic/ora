@@ -16,6 +16,10 @@ buffer: TextBuffer,
 blink_timer: f32 = 0,
 last_frame: i64 = 0,
 
+pub fn isEmpty(view: *EditorView) bool {
+    return view.buffer.text().len == 0;
+}
+
 pub fn init(allocator: std.mem.Allocator) EditorView {
     return EditorView{ .buffer = TextBuffer.init(allocator) };
 }
@@ -54,6 +58,7 @@ fn updateCursor(view: *EditorView) void {
 pub fn frame(view: *EditorView, cx: *DrawingContext, dx: f32, dy: f32) void {
     view.updateCursor();
     cx.setColor(ui.colors.white);
+    cx.text.setSize(24);
 
     const metrics = cx.text.verticalMetrics();
 
@@ -70,7 +75,6 @@ pub fn frame(view: *EditorView, cx: *DrawingContext, dx: f32, dy: f32) void {
         );
     }
 
-    cx.text.setSize(24);
     if (view.buffer.text().len > 0) {
         _ = cx.drawText(dx, dy, view.buffer.text());
     } else {
