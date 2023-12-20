@@ -19,11 +19,15 @@ const ImageView = @import("views/image.zig");
 
 pub const io_mode = .blocking;
 
+const geist_regular = @embedFile("assets/Geist-Regular.ttf");
+const geist_semibold = @embedFile("assets/Geist-SemiBold.ttf");
+
 pub const state = struct {
     var pass_action = sg.PassAction{};
 
     var ctx: DrawingContext = undefined;
-    var font: fontstash.Font = undefined;
+    var font_regular: fontstash.Font = undefined;
+    var font_bold: fontstash.Font = undefined;
 
     var buffer: TextBuffer = undefined;
 
@@ -58,7 +62,8 @@ fn init() !void {
     state.candidates = std.ArrayList(tools.Candidate).init(state.gpa.allocator());
 
     state.ctx = try DrawingContext.init();
-    state.font = state.ctx.text.load("sans", "Geist-Regular.ttf") orelse @panic("failed to load font!");
+    state.font_regular = state.ctx.text.add("regular", geist_regular, false) orelse @panic("failed to load font!");
+    state.font_bold = state.ctx.text.add("bold", geist_semibold, false) orelse @panic("failed to load font!");
 
     state.buffer = TextBuffer.from(
         state.gpa.allocator(),
@@ -107,7 +112,7 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
     sgl.matrixModeProjection();
     sgl.ortho(0.0, @floatFromInt(size.width), @floatFromInt(size.height), 0.0, -1, 1);
 
-    ctx.text.setFont(state.font);
+    ctx.text.setFont(state.font_regular);
     ctx.text.setSize(24 * dpis);
 
     const dx = 24;
@@ -132,14 +137,24 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
     }
 
     if (state.buffer.buffer.items.len > 0) {
+        ctx.text.setSize(24 * dpis);
         ctx.text.setColor(white);
         _ = ctx.text.drawText(dx, dy, state.buffer.buffer.items);
 
-        dy += metrics.lineh * 1.25;
+        dy += metrics.lineh * 1.75;
 
         const temp_selection = std.math.clamp(state.selection, 0, @min(10, state.candidates.items.len -| 1));
 
+        ctx.text.setColor(gray);
+        ctx.text.setSize(20 * dpis);
+        _ = ctx.text.drawText(dx, dy, "Applications");
+
+        dy += metrics.lineh * 1.125;
+
         for (state.candidates.items, 0..) |candidate, i| {
+            ctx.text.setFont(state.font_regular);
+            ctx.text.setSize(24 * dpis);
+            ctx.text.setColor(white);
             const inner_padding = metrics.lineh * 2;
 
             if (temp_selection == i) {

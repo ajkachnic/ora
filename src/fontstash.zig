@@ -83,7 +83,7 @@ pub const Context = struct {
 
     /// Add a font from memory
     pub fn add(ctx: *Context, name: [*:0]const u8, data: []const u8, free: bool) ?Font {
-        const id = c.fonsAddFontMem(ctx.inner, name, data.ptr, data.len, free);
+        const id = c.fonsAddFontMem(ctx.inner, name, @constCast(data.ptr), @intCast(data.len), @intFromBool(free));
         if (id == c.FONS_INVALID) {
             return null;
         }
