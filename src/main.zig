@@ -120,9 +120,14 @@ fn frame(w: glfw.Window, frame_time: i64) !void {
         ctx.shape.line(cursor_position, dy - metrics.lineh * 0.5, cursor_position + 1, dy + metrics.lineh * 0.5);
     }
 
+    // TODO: load icons immediately, don't wait for user input
     for (state.candidates.items) |candidate| {
         if (!state.icons.contains(candidate.icon) and candidate.icon.len != 0) {
-            try state.icons.put(candidate.icon, try ImageView.init(state.gpa.allocator(), candidate.icon));
+            try state.icons.put(candidate.icon, try ImageView.init(
+                state.gpa.allocator(),
+                candidate.icon,
+                .{ .width = 32, .height = 32 },
+            ));
         }
     }
 
@@ -230,11 +235,6 @@ fn centerWindow(w: glfw.Window) void {
 
     if (glfw.Monitor.getPrimary()) |primary| {
         const workarea = primary.getWorkarea();
-
-        std.log.info(
-            "{d}x{d} ({d}, {d})",
-            .{ workarea.width, workarea.height, workarea.x, workarea.y },
-        );
 
         w.setPos(.{
             .x = @intCast(@divFloor(workarea.width, 2) - @divFloor(size.width, 2)),

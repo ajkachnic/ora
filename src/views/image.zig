@@ -25,8 +25,14 @@ is_original: bool,
 
 width: c_int = 0,
 height: c_int = 0,
+options: Options,
 
-pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
+pub const Options = struct {
+    width: c_int = -1,
+    height: c_int = -1,
+};
+
+pub fn init(allocator: std.mem.Allocator, path: []const u8, options: Options) !*ImageView {
     if (image_map == null) {
         image_map = std.StringHashMap(sg.Image).init(allocator);
     }
@@ -39,6 +45,7 @@ pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
             .job = null,
             .handle = handle,
             .is_original = false,
+            .options = options,
         };
 
         return view;
@@ -59,6 +66,7 @@ pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
         .job = job,
         .handle = handle,
         .is_original = true,
+        .options = options,
     };
 
     try job.wait(*ImageView, view, loadedCallback);
@@ -67,7 +75,6 @@ pub fn init(allocator: std.mem.Allocator, path: []const u8) !*ImageView {
 }
 
 fn loadedCallback(self: *ImageView, buffer: []u8) void {
-    std.log.info("image loaded!", .{});
     self.buffer = buffer;
 
     var width: c_int = 0;
@@ -88,19 +95,19 @@ fn loadedCallback(self: *ImageView, buffer: []u8) void {
         var subimage = [_][16]sg.Range{[_]sg.Range{.{}} ** 16} ** 6;
         defer c.stbi_image_free(pixels);
         // yay we get to resize!
-        if (width != 32 or height != 32) {
+        if ((width != self.options.width or height != self.options.height) and self.options.width > 0 and self.options.height > 0) {
             // zig fmt: off
-            const resized = self.allocator.alloc(u8, 32 * 32 * 4) catch {
+            const resized = self.allocator.alloc(u8, @intCast(self.options.width  * self.options.height * num_channels)) catch {
                 @panic("oom");
             };
             defer self.allocator.free(resized);
             
             _ = c.stbir_resize_uint8(
                 pixels, width, height, 0, 
-                @ptrCast(resized), 32, 32, 0, num_channels,
+                @ptrCast(resized), self.options.width, self.options.height, 0, num_channels,
             );
             // zig fmt: on
-            width = 32;
+            width = self.options.width;
             height = 32;
 
             subimage[0][0] = .{
